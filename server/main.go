@@ -18,7 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/sessions"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -136,9 +136,17 @@ type Product struct {
 func main() {
 	var err error
 
-	execPath, _ := os.Executable()
-	execDir := filepath.Dir(execPath)
-	rootDir := filepath.Join(execDir, "..")
+	execPath, err := os.Executable()
+	rootDir := "/app"
+	if err == nil {
+		execDir := filepath.Dir(execPath)
+		parent := filepath.Dir(execDir)
+		if filepath.Base(execDir) == "server" {
+			rootDir = parent
+		} else {
+			rootDir = execDir
+		}
+	}
 
 	loadEnv(filepath.Join(rootDir, ".env"))
 
@@ -149,7 +157,7 @@ func main() {
 	os.MkdirAll(uploads, 0755)
 
 	dbPath := filepath.Join(dataDir, "bakery.db")
-	db, err = sql.Open("sqlite3", dbPath+"?_journal_mode=WAL")
+	db, err = sql.Open("sqlite", "file:"+dbPath+"?_pragma=journal_mode(WAL)")
 	if err != nil {
 		log.Fatal("Failed to open database:", err)
 	}
