@@ -61,6 +61,11 @@ db.exec(`
     username TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS sessions (
+    sid TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    expires REAL
+  );
 `)
 
 const pass = process.env.ADMIN_PASSWORD || 'admin123'
@@ -96,6 +101,67 @@ setInterval(() => {
   }
 }, 60 * 1000)
 
+// --- Session store ---
+
+class SqliteStore extends session.Store {
+  constructor(db) {
+    super()
+    this.db = db
+  }
+
+  get(sid, callback) {
+    try {
+      const row = this.db.prepare('SELECT data FROM sessions WHERE sid = ? AND (expires IS NULL OR expires > ?)').get(sid, Date.now())
+      callback(null, row ? JSON.parse(row.data) : null)
+    } catch (err) {
+      callback(err)
+    }
+  }
+
+  set(sid, session, callback) {
+    try {
+      let expires = null
+      if (session.cookie?.expires) {
+        expires = new Date(session.cookie.expires).getTime()
+      } else if (session.cookie?.maxAge) {
+        expires = Date.now() + session.cookie.maxAge
+      }
+      this.db.prepare('INSERT OR REPLACE INTO sessions (sid, data, expires) VALUES (?, ?, ?)').run(sid, JSON.stringify(session), expires)
+      callback(null)
+    } catch (err) {
+      callback(err)
+    }
+  }
+
+  destroy(sid, callback) {
+    try {
+      this.db.prepare('DELETE FROM sessions WHERE sid = ?').run(sid)
+      callback(null)
+    } catch (err) {
+      callback(err)
+    }
+  }
+
+  touch(sid, session, callback) {
+    try {
+      let expires = null
+      if (session.cookie?.expires) {
+        expires = new Date(session.cookie.expires).getTime()
+      } else if (session.cookie?.maxAge) {
+        expires = Date.now() + session.cookie.maxAge
+      }
+      this.db.prepare('UPDATE sessions SET expires = ? WHERE sid = ?').run(expires, sid)
+      callback(null)
+    } catch (err) {
+      callback(err)
+    }
+  }
+}
+
+setInterval(() => {
+  db.prepare('DELETE FROM sessions WHERE expires IS NOT NULL AND expires <= ?').run(Date.now())
+}, 15 * 60 * 1000)
+
 // --- Middleware ---
 
 app.use(cors({
@@ -118,6 +184,7 @@ app.use((req, res, next) => {
 
 app.use(express.json())
 app.use(session({
+  store: new SqliteStore(db),
   secret: process.env.SESSION_SECRET || 'fallback-secret-change-me',
   resave: false,
   saveUninitialized: false,
