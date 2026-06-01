@@ -254,6 +254,12 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ message: err.message || 'Internal server error' })
 })
 
+// --- 404 handler for API routes ---
+
+app.use('/api', (req, res) => {
+  res.status(404).json({ message: `Route not found: ${req.method} ${req.path}` })
+})
+
 // --- SPA fallback ---
 
 if (distDir && fs.existsSync(distDir)) {
