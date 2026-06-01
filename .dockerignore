@@ -1,0 +1,13 @@
+node_modules
+data
+uploads
+.env
+.git
+.gitignore
+*.md
+.vscode
+e2e
+playwright-report
+test-results
+.gitattributes
+*.timestamp-*-*.mjs
