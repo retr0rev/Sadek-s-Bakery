@@ -104,6 +104,11 @@ app.use(cors({
 }))
 
 app.use((req, res, next) => {
+  res.setHeader('X-Server-Version', '2')
+  next()
+})
+
+app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('X-Frame-Options', 'DENY')
   res.setHeader('Referrer-Policy', 'same-origin')
