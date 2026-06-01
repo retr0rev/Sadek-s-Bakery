@@ -127,9 +127,6 @@ app.use(session({
 app.use('/uploads', express.static(uploadsDir))
 
 const distDir = path.join(__dirname, '..', 'dist')
-if (fs.existsSync(distDir)) {
-  app.use(express.static(distDir))
-}
 
 // --- Auth middleware ---
 
@@ -259,12 +256,16 @@ app.use((err, req, res, next) => {
 
 // --- SPA fallback ---
 
-const distIndex = path.join(distDir, 'index.html')
-if (fs.existsSync(distIndex)) {
-  app.use((req, res) => {
-    if (!req.path.startsWith('/api/') && !req.path.startsWith('/uploads/')) {
-      res.sendFile(distIndex)
+if (distDir && fs.existsSync(distDir)) {
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) {
+      return next()
     }
+    const filePath = path.join(distDir, req.path === '/' ? 'index.html' : req.path)
+    if (req.path !== '/' && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      return res.sendFile(filePath)
+    }
+    res.sendFile(path.join(distDir, 'index.html'))
   })
 }
 
