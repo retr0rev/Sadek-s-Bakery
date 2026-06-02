@@ -116,17 +116,30 @@ async function saveProduct() {
 }
 
 async function deleteProduct(id: number) {
-  if (!confirm('هل أنت متأكد من حذف هذا المنتج؟')) return
+  console.log('deleteProduct called with id:', id)
+  try {
+    if (typeof confirm !== 'function' || !confirm('هل أنت متأكد من حذف هذا المنتج؟')) {
+      console.log('deleteProduct: cancelled or confirm not available')
+      return
+    }
+  } catch (e) {
+    console.error('deleteProduct: confirm error:', e)
+    return
+  }
 
   try {
+    console.log('deleteProduct: sending DELETE request for id:', id)
     const res = await apiFetch(`/api/products/${id}`, { method: 'DELETE' })
+    console.log('deleteProduct: response status:', res.status)
     if (!res.ok) {
       let msg = 'فشل الحذف'
       try { const d = await res.json(); msg = d.message || msg } catch {}
       throw new Error(msg)
     }
+    console.log('deleteProduct: success, refetching products')
     await fetchProducts()
   } catch (e: any) {
+    console.error('deleteProduct: error:', e)
     alert(e.message)
   }
 }
