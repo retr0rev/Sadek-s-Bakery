@@ -1,8 +1,18 @@
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {}
+  const token = localStorage.getItem('auth_token')
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  return headers
+}
+
 export async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
   const res = await fetch(url, {
     ...options,
     headers: {
-      ...(options?.headers || {}),
+      ...getAuthHeaders(),
+      ...options?.headers,
       Accept: 'application/json',
     },
     credentials: 'include',

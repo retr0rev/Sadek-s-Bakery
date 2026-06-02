@@ -1,10 +1,10 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
-import session from 'express-session'
 import multer from 'multer'
 import path from 'path'
 import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
 import Database from 'better-sqlite3'
@@ -13,6 +13,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 3001
 const isProd = process.env.NODE_ENV === 'production'
+
+app.set('trust proxy', 1)
 
 const dataDir = path.join(__dirname, '..', 'data')
 const uploadsDir = path.join(__dirname, '..', 'uploads')
@@ -68,6 +70,16 @@ db.exec(`
   );
 `)
 
+// Migrate: add admin_tokens table if not exists
+db.exec(`
+  CREATE TABLE IF NOT EXISTS admin_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_id INTEGER NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`)
+
 const pass = process.env.ADMIN_PASSWORD || 'admin123'
 const adminCount = db.prepare('SELECT COUNT(*) as count FROM admins').get()
 if (adminCount.count === 0) {
@@ -78,88 +90,10 @@ if (adminCount.count === 0) {
   db.prepare('UPDATE admins SET password = ? WHERE username = ?').run(hash, 'admin')
 }
 
-// --- Rate limiter ---
-
-const loginAttempts = new Map()
-
-function rateLimit(ip) {
-  const now = Date.now()
-  const window = 15 * 60 * 1000
-  if (!loginAttempts.has(ip)) loginAttempts.set(ip, [])
-  const times = loginAttempts.get(ip).filter(t => t > now - window)
-  if (times.length >= 10) return false
-  times.push(now)
-  loginAttempts.set(ip, times)
-  return true
-}
-
-setInterval(() => {
-  const cutoff = Date.now() - 15 * 60 * 1000
-  for (const [ip, times] of loginAttempts) {
-    const filtered = times.filter(t => t > cutoff)
-    filtered.length ? loginAttempts.set(ip, filtered) : loginAttempts.delete(ip)
-  }
-}, 60 * 1000)
-
-// --- Session store ---
-
-class SqliteStore extends session.Store {
-  constructor(db) {
-    super()
-    this.db = db
-  }
-
-  get(sid, callback) {
-    try {
-      const row = this.db.prepare('SELECT data FROM sessions WHERE sid = ? AND (expires IS NULL OR expires > ?)').get(sid, Date.now())
-      callback(null, row ? JSON.parse(row.data) : null)
-    } catch (err) {
-      callback(err)
-    }
-  }
-
-  set(sid, session, callback) {
-    try {
-      let expires = null
-      if (session.cookie?.expires) {
-        expires = new Date(session.cookie.expires).getTime()
-      } else if (session.cookie?.maxAge) {
-        expires = Date.now() + session.cookie.maxAge
-      }
-      this.db.prepare('INSERT OR REPLACE INTO sessions (sid, data, expires) VALUES (?, ?, ?)').run(sid, JSON.stringify(session), expires)
-      callback(null)
-    } catch (err) {
-      callback(err)
-    }
-  }
-
-  destroy(sid, callback) {
-    try {
-      this.db.prepare('DELETE FROM sessions WHERE sid = ?').run(sid)
-      callback(null)
-    } catch (err) {
-      callback(err)
-    }
-  }
-
-  touch(sid, session, callback) {
-    try {
-      let expires = null
-      if (session.cookie?.expires) {
-        expires = new Date(session.cookie.expires).getTime()
-      } else if (session.cookie?.maxAge) {
-        expires = Date.now() + session.cookie.maxAge
-      }
-      this.db.prepare('UPDATE sessions SET expires = ? WHERE sid = ?').run(expires, sid)
-      callback(null)
-    } catch (err) {
-      callback(err)
-    }
-  }
-}
-
+// Clean up old sessions/tokens
 setInterval(() => {
   db.prepare('DELETE FROM sessions WHERE expires IS NOT NULL AND expires <= ?').run(Date.now())
+  db.prepare("DELETE FROM admin_tokens WHERE created_at < datetime('now', '-24 hours')").run()
 }, 15 * 60 * 1000)
 
 // --- Middleware ---
@@ -182,37 +116,45 @@ app.use((req, res, next) => {
   next()
 })
 
-app.use(session({
-  store: new SqliteStore(db),
-  secret: process.env.SESSION_SECRET || 'fallback-secret-change-me',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: isProd,
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000,
-  },
-}))
 app.use(express.json())
 
 app.use('/uploads', express.static(uploadsDir))
 
 const distDir = path.join(__dirname, '..', 'dist')
 
+// --- Token helpers ---
+
+function generateToken() {
+  return crypto.randomBytes(32).toString('hex')
+}
+
+function getTokenFromRequest(req) {
+  const header = req.headers['authorization']
+  if (!header) return null
+  const parts = header.split(' ')
+  if (parts.length !== 2 || parts[0] !== 'Bearer') return null
+  return parts[1]
+}
+
+function verifyToken(token) {
+  if (!token) return null
+  const row = db.prepare(
+    "SELECT * FROM admin_tokens WHERE token = ? AND created_at > datetime('now', '-24 hours')"
+  ).get(token)
+  if (!row) return null
+  const admin = db.prepare('SELECT id, username FROM admins WHERE id = ?').get(row.admin_id)
+  return admin || null
+}
+
 // --- Auth middleware ---
 
 function requireAuth(req, res, next) {
-  if (!req.session || !req.session.adminId) {
+  const token = getTokenFromRequest(req)
+  const admin = verifyToken(token)
+  if (!admin) {
     return res.status(401).json({ message: 'Unauthorized' })
   }
-  const origin = req.headers['origin']
-  if (origin && isProd) {
-    const allowed = process.env.ALLOWED_ORIGIN
-    if (allowed && origin !== allowed) {
-      return res.status(403).json({ message: 'Forbidden' })
-    }
-  }
+  req.admin = admin
   next()
 }
 
@@ -234,30 +176,30 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ message: 'Invalid credentials' })
   }
 
-  req.session.adminId = admin.id
-  req.session.save((err) => {
-    if (err) {
-      console.error('Failed to save session:', err)
-      return res.status(500).json({ message: 'Failed to create session' })
-    }
-    res.json({
-      message: 'Login successful',
-      admin: { id: admin.id, username: admin.username },
-    })
+  const token = generateToken()
+  db.prepare('INSERT INTO admin_tokens (admin_id, token) VALUES (?, ?)').run(admin.id, token)
+
+  res.json({
+    message: 'Login successful',
+    admin: { id: admin.id, username: admin.username },
+    token,
   })
 })
 
 app.post('/api/auth/logout', (req, res) => {
-  req.session.destroy()
+  const token = getTokenFromRequest(req)
+  if (token) {
+    db.prepare('DELETE FROM admin_tokens WHERE token = ?').run(token)
+  }
   res.json({ message: 'Logged out' })
 })
 
 app.get('/api/auth/me', (req, res) => {
-  if (!req.session || !req.session.adminId) {
+  const token = getTokenFromRequest(req)
+  const admin = verifyToken(token)
+  if (!admin) {
     return res.status(401).json({ message: 'Not authenticated' })
   }
-  const admin = db.prepare('SELECT id, username FROM admins WHERE id = ?').get(req.session.adminId)
-  if (!admin) return res.status(401).json({ message: 'Not authenticated' })
   res.json({ admin })
 })
 
@@ -356,3 +298,26 @@ if (distDir && fs.existsSync(distDir)) {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)
 })
+
+// --- Rate limiter ---
+
+const loginAttempts = new Map()
+
+function rateLimit(ip) {
+  const now = Date.now()
+  const window = 15 * 60 * 1000
+  if (!loginAttempts.has(ip)) loginAttempts.set(ip, [])
+  const times = loginAttempts.get(ip).filter(t => t > now - window)
+  if (times.length >= 10) return false
+  times.push(now)
+  loginAttempts.set(ip, times)
+  return true
+}
+
+setInterval(() => {
+  const cutoff = Date.now() - 15 * 60 * 1000
+  for (const [ip, times] of loginAttempts) {
+    const filtered = times.filter(t => t > cutoff)
+    filtered.length ? loginAttempts.set(ip, filtered) : loginAttempts.delete(ip)
+  }
+}, 60 * 1000)
