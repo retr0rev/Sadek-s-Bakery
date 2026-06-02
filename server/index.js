@@ -259,8 +259,12 @@ app.delete('/api/products/:id', requireAuth, (req, res) => {
   const existing = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id)
   if (!existing) return res.status(404).json({ message: 'Product not found' })
   if (existing.image) {
-    const p = path.join(__dirname, '..', existing.image)
-    if (fs.existsSync(p)) fs.unlinkSync(p)
+    try {
+      const p = path.join(__dirname, '..', existing.image)
+      if (fs.existsSync(p)) fs.unlinkSync(p)
+    } catch (e) {
+      console.error('Failed to delete image file:', e.message)
+    }
   }
   db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id)
   res.json({ message: 'Product deleted' })

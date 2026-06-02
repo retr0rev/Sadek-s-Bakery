@@ -120,7 +120,11 @@ async function deleteProduct(id: number) {
 
   try {
     const res = await apiFetch(`/api/products/${id}`, { method: 'DELETE' })
-    if (!res.ok) throw new Error('فشل الحذف')
+    if (!res.ok) {
+      let msg = 'فشل الحذف'
+      try { const d = await res.json(); msg = d.message || msg } catch {}
+      throw new Error(msg)
+    }
     await fetchProducts()
   } catch (e: any) {
     alert(e.message)
