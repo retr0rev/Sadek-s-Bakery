@@ -76,15 +76,15 @@ onMounted(fetchProducts)
               <span dir="ltr">+963 935 747 523</span>
             </a>
             <span class="contact-sep">|</span>
-            <span class="contact-link">sadekbakery11@gmail.com</span>
+            <span class="contact-link">lebanonbakeryidlib@gmail.com</span>
           </div>
         </div>
       </div>
       <div class="header-main">
         <div class="container">
           <div class="brand">
-            <h1 class="brand-name">حلويات ومعجنات الصادق</h1>
-            <p class="brand-sub">Sadek's Sweets & Pastries</p>
+            <h1 class="brand-name">حلويات ومعجنات لبنان</h1>
+            <p class="brand-sub">Lebanon Sweets & Pastries</p>
           </div>
           <nav class="nav-links">
             <a href="#products" class="nav-link">المنتجات</a>
@@ -179,7 +179,7 @@ onMounted(fetchProducts)
           <div class="about-meta">
             <div class="meta-item">
               <span class="meta-label">الإدارة</span>
-              <span class="meta-value">جميل صادق</span>
+              <span class="meta-value">جميل صادق، رامي غفير</span>
             </div>
             <div class="meta-item">
               <span class="meta-label">تأسس عام</span>
@@ -195,7 +195,7 @@ onMounted(fetchProducts)
         <h2 class="section-title">اتصل بنا</h2>
         <div class="contact-cards">
           <a
-            href="https://wa.me/963535747523?text=%D9%85%D8%B1%D8%AD%D8%A8%D8%A7%D8%8C%20%D8%A3%D9%86%D8%A7%20%D8%A3%D8%AA%D9%81%D9%82%D8%AF%20%D8%A7%D9%84%D9%85%D9%86%D8%AA%D8%AC%D8%A7%D8%AA"
+            href="https://wa.me/9639535747523?text=%D9%85%D8%B1%D8%AD%D8%A8%D8%A7%D8%8C%20%D8%A3%D9%86%D8%A7%20%D8%A3%D8%AA%D9%81%D9%82%D8%AF%20%D8%A7%D9%84%D9%85%D9%86%D8%AA%D8%AC%D8%A7%D8%AA"
             target="_blank"
             class="contact-card"
           >
@@ -214,7 +214,7 @@ onMounted(fetchProducts)
               />
             </svg>
             <span>البريد الإلكتروني</span>
-            <span>sadekbakery11@gmail.com</span>
+            <span>lebanonbakeryidlib@gmail.com</span>
           </div>
         </div>
       </div>
@@ -222,8 +222,8 @@ onMounted(fetchProducts)
 
     <footer class="footer">
       <div class="container">
-        <p>جميع الحقوق محفوظة &copy; {{ new Date().getFullYear() }} حلويات ومعجنات الصادق</p>
-        <p class="dev-credit">بتطوير retr0rev</p>
+        <p>جميع الحقوق محفوظة &copy; {{ new Date().getFullYear() }} حلويات ومعجنات لبنان</p>
+        <p class="dev-credit">بتطوير <a href="https://github.com/retr0rev" target="_blank" rel="noopener noreferrer" class="credit-link">retr0rev</a></p>
       </div>
     </footer>
   </div>
@@ -625,6 +625,17 @@ onMounted(fetchProducts)
   margin-top: 4px !important;
   font-size: 12px;
   color: #5a3e2e;
+}
+
+.credit-link {
+  color: #d4a574;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.credit-link:hover {
+  text-decoration: underline;
+  color: #c49464;
 }
 
 @media (max-width: 768px) {
